@@ -1,3 +1,4 @@
 all_proteomes_small.pfamscan
 *.aln
 *fasta
+*nwk
