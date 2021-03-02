@@ -53,17 +53,68 @@ def find_majority(column, majority=0.5):
 		return None
 
 
+def avg_NOS_per_pos(column):
+	"""
+	Calculate the average NOS content per column of alignment 
+	(simulates the content of NOS in contemporary proteins, as opposed to the conserved acnestors
+	"""
+	countered = Counter(column)
+	total_counts = sum(countered.values())
+
+	N = 0
+	O = 0
+	S = 0
+
+	for element in countered:
+		if element not in aa_elements:
+			N += 0
+			O += 0
+			S += 0
+			continue
+		elements = aa_elements[element]
+		numb_occur = countered[element]
+
+		N += numb_occur*elements["n"]
+		O += numb_occur*elements["o"]
+		S += numb_occur*elements["s"]
+
+	return N,O,S
+
+def avg_NOS(align_array):
+	total_N = 0
+	total_O = 0
+	total_S = 0
+	col_num = 0
+        for column in align_array.T:
+
+		col_num += 1
+		num_proteins = len(column)
+                N,O,S = avg_NOS_per_pos(column)
+		N_avg = float(N)/num_proteins
+		O_avg = float(O)/num_proteins
+		S_avg = float(S)/num_proteins
+		total_N += N_avg
+		total_O += O_avg
+		total_S += S_avg
+
+	final_N = total_N/col_num
+	final_O = total_O/col_num
+	final_S = total_S/col_num
+
+	return final_N, final_O, final_S
+
 def calc_NOS_enrichment(align_array, majority=0.5):
 	conserved_positions = []
 	num_conserved_positions = 0
-
+	consensus_sequence = []
         Ns = []
         Os = []
         Ss = []
         for column in align_array.T:
                 majority_aa = find_majority(column, majority)
-
+		
                 if majority_aa != None:
+			consensus_sequence.append(majority_aa)
                         conserved_positions.append(column)
                         num_conserved_positions += 1
                         ns = calc_N(majority_aa) # number of N atoms in sidechain of the dominating aa in this column
@@ -81,7 +132,11 @@ def calc_NOS_enrichment(align_array, majority=0.5):
        		Os_enrichment = round(sum(Os)/float(num_conserved_positions),3)
         	Ss_enrichment = round(sum(Ss)/float(num_conserved_positions),3)
 
-	return Ns_enrichment, Os_enrichment, Ss_enrichment, num_conserved_positions
+	consensus_sequence_str = "".join(consensus_sequence)
+	return Ns_enrichment, Os_enrichment, Ss_enrichment, num_conserved_positions,consensus_sequence_str
+
+consensus_sequences_50_file = open("consensus_sequences50.fasta","w")
+consensus_sequences_75_file = open("consensus_sequences75.fasta","w")
 
 enrichment_dict = {}
 for file in files:
@@ -93,21 +148,28 @@ for file in files:
 	align.get_alignment_length()
 	num_conserved_positions = 0
 	align_array = np.array([list(rec) for rec in align], np.character)
-	Ns_enrichment50, Os_enrichment50, Ss_enrichment50, num_cons50 = calc_NOS_enrichment(align_array, 0.5)
-	Ns_enrichment75, Os_enrichment75, Ss_enrichment75, num_cons75 = calc_NOS_enrichment(align_array, 0.75)
-	enrichment_dict[pfam_name] = [Ns_enrichment50, Ns_enrichment75, Os_enrichment50, Os_enrichment75, Ss_enrichment50, Ss_enrichment75, num_cons50, num_cons75]  
-	#print(pfam_name, Ns_enrichment50, Ns_enrichment75)
+	Ns_enrichment50, Os_enrichment50, Ss_enrichment50, num_cons50, cons_seqs50 = calc_NOS_enrichment(align_array, 0.5)
+	Ns_enrichment75, Os_enrichment75, Ss_enrichment75, num_cons75, cons_seqs75 = calc_NOS_enrichment(align_array, 0.75)
+	N_cont, O_cont, S_cont = avg_NOS(align_array)
+	
+	header = ">" + pfam_name
+	consensus_sequences_50_file.write(header + "\n" + cons_seqs50 + "\n")
+	consensus_sequences_75_file.write(header + "\n" + cons_seqs75 + "\n")
+
+	enrichment_dict[pfam_name] = [Ns_enrichment50, Ns_enrichment75, Os_enrichment50, Os_enrichment75, Ss_enrichment50, Ss_enrichment75, num_cons50, num_cons75,N_cont, O_cont, S_cont]  
 
 ## merge with taxonomy_dict
 
-taxonomy_file = open("taxonomy_distribution.tab", "r").read().splitlines()
+taxonomy_file = open("taxonomy_distribution_clan.tab", "r").read().splitlines()
 tax_dict = {}
-outfile = open("elements_abundance.tab","w")
-outfile.write("\t".join(["pfam","num_bact_phyla","bact_phyla", "num_arch_phyla", "arch_phyla", "Ns_enrichment50", "Ns_enrichment75", "Os_enrichment50", "Os_enrichment75", "Ss_enrichment50", "Ss_enrichment75", "cons_pos50", "cons_pos75"]))
+outfile = open("elements_abundance_with_contemporary.tab","w")
+outfile.write("\t".join(["pfam","num_bact_phyla","bact_phyla", "num_arch_phyla", "arch_phyla", "Ns_enrichment50", "Ns_enrichment75", "Os_enrichment50", "Os_enrichment75", "Ss_enrichment50", "Ss_enrichment75", "cons_pos50", "cons_pos75", "N_cont", "O_cont", "S_cont", "\n"]))
 for line in taxonomy_file:
 	splitted = line.split("\t")
 	tax_dict[splitted[0]] = "\t".join(splitted[1:])
-	
+	## dating
+
+	#print(tax_dict[splitted[0]])
 	if splitted[0] not in enrichment_dict:
 		continue
 
